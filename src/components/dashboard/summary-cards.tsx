@@ -27,8 +27,14 @@ interface SummaryCardsProps {
   transactions: Transaction[]
 }
 
+/** Renders a YYYY-MM-DD date as MM-DD-YYYY without tripping over timezones. */
+function formatWindowDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-")
+  return `${month}-${day}-${year}`
+}
+
 export function SummaryCards({ transactions }: SummaryCardsProps) {
-  const { totalSpend30Days, categorySpending } = useDashboardStore()
+  const { totalSpend30Days, categorySpending, spendWindow } = useDashboardStore()
 
   const NON_SPENDING_CATEGORIES = new Set([
     "TRANSFER_OUT",
@@ -47,11 +53,18 @@ export function SummaryCards({ transactions }: SummaryCardsProps) {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left side: 30-day total + category breakdown */}
           <div>
-            <p className="text-sm text-muted-foreground mb-1">Last 30 Days</p>
-            <p className="text-4xl font-bold text-cyan-400 mb-6">
+            <p className="text-sm text-muted-foreground mb-1">
+              {spendWindow?.isStale ? "Last 30 Days of Activity" : "Last 30 Days"}
+            </p>
+            <p className="text-4xl font-bold text-cyan-400 mb-1">
               {totalSpend30Days > 0
                 ? formatCurrency(totalSpend30Days)
                 : "$0.00"}
+            </p>
+            <p className="text-xs text-muted-foreground mb-6 h-4">
+              {spendWindow?.isStale
+                ? `Through ${formatWindowDate(spendWindow.end)} — no newer data`
+                : ""}
             </p>
 
             {sortedCategories.length > 0 ? (

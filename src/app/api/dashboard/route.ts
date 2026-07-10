@@ -1,16 +1,12 @@
 import { NextResponse } from "next/server"
 import { createServerSupabase } from "@/lib/supabase/server"
 import { EXCLUDED_SUBTYPES } from "@/lib/plaid/excluded-accounts"
+import { computeSpendWindow, isInWindow } from "@/lib/spend-window"
 
 export const dynamic = "force-dynamic"
 
 export async function GET() {
   const supabase = createServerSupabase()
-
-  // 30 days ago
-  const thirtyDaysAgo = new Date()
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-  const cutoffDate = thirtyDaysAgo.toISOString().slice(0, 10)
 
   const [accountsRes, liabilitiesRes, transactionsRes] = await Promise.all([
     supabase.from("accounts").select("*")
@@ -45,6 +41,7 @@ export async function GET() {
   // Flatten account name into transactions
   type RawTransaction = Record<string, unknown> & {
     amount: number
+    date: string
     category_primary: string | null
     accounts: { name: string | null } | null
   }
@@ -56,7 +53,11 @@ export async function GET() {
     }
   })
 
-  // Compute category spending from 30-day transactions
+  // Transactions come back ordered by date DESC, so the first is the newest.
+  // When sandbox data has gone stale the window anchors to it instead of today.
+  const spendWindow = computeSpendWindow(transactions[0]?.date ?? null)
+
+  // Compute category spending within the window.
   // Exclude transfers and loan payments from the spending total — these are
   // money movements, not spending, and would otherwise double-count.
   const NON_SPENDING_CATEGORIES = new Set([
@@ -70,7 +71,7 @@ export async function GET() {
   let totalSpend30Days = 0
 
   for (const t of transactions) {
-    if (t.amount > 0 && (t as { date?: string }).date! >= cutoffDate) {
+    if (t.amount > 0 && isInWindow(t.date, spendWindow)) {
       const cat = t.category_primary ?? "OTHER"
       const entry = categoryMap.get(cat) ?? { total: 0, count: 0 }
       entry.total += t.amount
@@ -93,5 +94,6 @@ export async function GET() {
     transactions,
     categorySpending,
     totalSpend30Days,
+    spendWindow,
   })
 }

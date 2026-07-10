@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import type { Account, CreditLiability, CategorySpendingEntry } from "@/lib/queries/types"
 import type { TransactionWithAccount } from "@/lib/queries/transactions"
+import type { SpendWindow } from "@/lib/spend-window"
 
 const STALE_AFTER_MS = 15 * 60 * 1000 // 15 minutes
 
@@ -11,6 +12,7 @@ interface DashboardStore {
   transactions: TransactionWithAccount[]
   categorySpending: CategorySpendingEntry[]
   totalSpend30Days: number
+  spendWindow: SpendWindow | null
 
   // State
   isLoaded: boolean
@@ -34,6 +36,7 @@ const initialState = {
   transactions: [],
   categorySpending: [],
   totalSpend30Days: 0,
+  spendWindow: null,
   isLoaded: false,
   isLoading: false,
   error: null,
@@ -72,6 +75,7 @@ export const useDashboardStore = create<DashboardStore>((set, get) => ({
         transactions: data.transactions,
         categorySpending: data.categorySpending,
         totalSpend30Days: data.totalSpend30Days,
+        spendWindow: data.spendWindow ?? null,
         isLoaded: true,
         isLoading: false,
         loadedAt: Date.now(),
