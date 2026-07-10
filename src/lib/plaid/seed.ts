@@ -4,8 +4,28 @@ import { EXCLUDED_SUBTYPES } from '@/lib/plaid/excluded-accounts'
 import { Products, SandboxPublicTokenCreateRequestOptions } from 'plaid'
 import type { Transaction as PlaidTransaction } from 'plaid'
 
-const SANDBOX_INSTITUTION_ID = 'ins_109508' // First Platypus Bank
+const SANDBOX_INSTITUTION_ID = 'ins_109508' // First Platypus Bank (non-OAuth, required by the test user below)
 const SANDBOX_INSTITUTION_NAME = 'First Platypus Bank'
+
+/**
+ * The `user_good` default produces a static transaction history that can never
+ * be extended. `user_transactions_dynamic` produces a depository and a credit
+ * card account whose transactions grow each time /transactions/refresh is
+ * called — which is what keeps this dashboard's data current without wiping it.
+ * Any password is accepted for this user.
+ */
+const SANDBOX_USERNAME = 'user_transactions_dynamic'
+const SANDBOX_PASSWORD = 'pass_good'
+
+/**
+ * The dynamic user only exposes a checking and a credit card account, but the
+ * account cards and Payoff Planner also want a savings account, a student loan,
+ * and a mortgage. These come from a throwaway `user_good` Item at the same
+ * institution — we want its balances, never its transactions, which are static
+ * and cannot be refreshed.
+ */
+const BALANCE_ONLY_USERNAME = 'user_good'
+const BALANCE_ONLY_SUBTYPES = new Set(['savings', 'student', 'mortgage'])
 const TRANSACTION_HISTORY_DAYS = 365
 const PRODUCT_READY_ATTEMPTS = 5
 const PRODUCT_READY_DELAY_MS = 3000
@@ -15,6 +35,8 @@ export interface SeedResult {
   success: true
   institution: string
   accounts_added: number
+  /** Subset of accounts_added borrowed from a `user_good` Item for balances only. */
+  balance_only_accounts_added: number
   transactions_added: number
   liabilities_added: number
   items_removed: number
@@ -46,9 +68,10 @@ export async function seedSandboxData(): Promise<SeedResult> {
       await plaidClient.itemRemove({ access_token: inst.plaid_access_token })
       itemsRemoved++
     } catch (err) {
-      // A stale item may already be gone. Log and keep going — failing here
-      // would block the reseed for a purely cosmetic cleanup step.
-      console.error('Failed to remove old Plaid item:', err)
+      // A stale item may already be gone, or its token invalidated. Log and keep
+      // going — failing here would block the reseed for a cosmetic cleanup step.
+      // Surface Plaid's error_code; the raw AxiosError says nothing useful.
+      console.error('Failed to remove old Plaid item:', describeSeedError(err))
     }
   }
 
@@ -67,6 +90,8 @@ export async function seedSandboxData(): Promise<SeedResult> {
     initial_products: [Products.Transactions],
     options: {
       webhook: '',
+      override_username: SANDBOX_USERNAME,
+      override_password: SANDBOX_PASSWORD,
     } as SandboxPublicTokenCreateRequestOptions,
   })
 
@@ -157,15 +182,85 @@ export async function seedSandboxData(): Promise<SeedResult> {
     if (error) throw new Error(`Failed to upsert transactions: ${error.message}`)
   }
 
+  const balanceOnlyAdded = await seedBalanceOnlyAccounts(institution!.id)
   const liabilitiesAdded = await seedLiabilities()
 
   return {
     success: true,
     institution: SANDBOX_INSTITUTION_NAME,
-    accounts_added: accountsToInsert.length,
+    accounts_added: accountsToInsert.length + balanceOnlyAdded,
+    balance_only_accounts_added: balanceOnlyAdded,
     transactions_added: allTransactions.length,
     liabilities_added: liabilitiesAdded,
     items_removed: itemsRemoved,
+  }
+}
+
+/**
+ * Borrow the savings / student loan / mortgage accounts from a `user_good` Item,
+ * attach them to the institution row we already created (it is the same Plaid
+ * institution), then release the Item.
+ *
+ * Only the accounts and their balances are stored. No transactions are pulled,
+ * so nothing stale can enter the transactions table and the refresh cron has
+ * nothing extra to sync. Balances are static in Sandbox anyway — the Payoff
+ * Planner reads balances and APRs, not transaction history.
+ */
+async function seedBalanceOnlyAccounts(institutionRowId: string): Promise<number> {
+  const supabase = createServerSupabase()
+
+  const sandboxResponse = await plaidClient.sandboxPublicTokenCreate({
+    institution_id: SANDBOX_INSTITUTION_ID,
+    initial_products: [Products.Transactions],
+    options: {
+      webhook: '',
+      override_username: BALANCE_ONLY_USERNAME,
+      override_password: SANDBOX_PASSWORD,
+    } as SandboxPublicTokenCreateRequestOptions,
+  })
+
+  const exchangeResponse = await plaidClient.itemPublicTokenExchange({
+    public_token: sandboxResponse.data.public_token,
+  })
+  const accessToken = exchangeResponse.data.access_token
+
+  try {
+    const accountsResponse = await plaidClient.accountsGet({ access_token: accessToken })
+
+    const wanted = accountsResponse.data.accounts.filter(account => {
+      const subtype = account.subtype ?? ''
+      return BALANCE_ONLY_SUBTYPES.has(subtype) && !EXCLUDED_SUBTYPES.has(subtype)
+    })
+
+    if (wanted.length === 0) return 0
+
+    const { error } = await supabase.from('accounts').upsert(
+      wanted.map(account => ({
+        plaid_account_id: account.account_id,
+        institution_id: institutionRowId,
+        name: account.name,
+        official_name: account.official_name,
+        type: account.type,
+        subtype: account.subtype,
+        mask: account.mask,
+        balance_available: account.balances.available,
+        balance_current: account.balances.current,
+        balance_limit: account.balances.limit,
+        balance_updated_at: new Date().toISOString(),
+      })),
+      { onConflict: 'plaid_account_id' }
+    )
+    if (error) throw new Error(`Failed to upsert balance-only accounts: ${error.message}`)
+
+    return wanted.length
+  } finally {
+    // Release the borrowed Item either way. Its access token is never stored,
+    // so leaving it alive would strand it with no way to reach it again.
+    try {
+      await plaidClient.itemRemove({ access_token: accessToken })
+    } catch (err) {
+      console.error('Failed to release balance-only Plaid item:', describeSeedError(err))
+    }
   }
 }
 

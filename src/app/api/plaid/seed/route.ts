@@ -10,9 +10,10 @@ export const maxDuration = 60
  * sandbox item, which is the only way to get transactions dated near today —
  * Plaid's sandbox anchors an item's history to its creation and never adds more.
  *
- * Deliberately manual, never scheduled: it is destructive, and the dashboard
- * already degrades gracefully on stale data (see lib/spend-window.ts). Invoke
- * only when you want to trade the existing data for fresh dates:
+ * Deliberately manual, never scheduled. Day-to-day freshness comes from the
+ * additive GET /api/cron/refresh instead; this route exists to establish (or
+ * rebuild) the Item that refresh then keeps current. Invoke only when you mean
+ * to trade the existing data for a fresh Item:
  *
  *   curl -X POST https://<host>/api/plaid/seed \
  *     -H "Authorization: Bearer $CRON_SECRET"

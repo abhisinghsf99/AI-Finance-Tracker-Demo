@@ -86,20 +86,46 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to view the app.
 
-### 6. Connect a Sandbox Bank
+### 6. Seed Sandbox Data
 
-1. Click **Connect Bank Account** on the dashboard
-2. Select any institution in the Plaid Link modal
-3. Use these test credentials:
-   - Username: `user_good`
-   - Password: `pass_good`
-4. Your sandbox accounts and transactions will sync automatically
+Seeding is a server-side operation — there is no Link modal. Set `CRON_SECRET`
+in `.env.local` first, then:
 
-## Sandbox Test Credentials
+```bash
+curl -X POST http://localhost:3000/api/plaid/seed \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
 
-| Username | Password | Description |
-|----------|----------|-------------|
-| `user_good` | `pass_good` | Standard test user with checking + savings |
+This **wipes the database** and rebuilds it from fresh Plaid sandbox Items.
+
+## Keeping Data Fresh
+
+Plaid's sandbox anchors an Item's transaction history to the moment that Item is
+created and never generates more, so a one-time seed goes stale. Two mechanisms
+keep the dashboard current:
+
+1. **Daily refresh cron** (`GET /api/cron/refresh`, scheduled in `vercel.json`).
+   Calls `/transactions/refresh` on each Item, then syncs the new transactions
+   into Supabase. Purely additive — no table is ever cleared. Requires the Item
+   to have been created as `user_transactions_dynamic`.
+2. **Stale-window fallback** (`src/lib/spend-window.ts`). If the cron fails and
+   the newest transaction ages past 30 days, the spending window anchors to that
+   transaction instead of to today, so the summary is never blank. The UI labels
+   it "Last 30 Days of Activity — through `<date>`".
+
+Vercel Cron only runs on Production deployments, and only fires GET requests.
+
+## Sandbox Test Users
+
+The seed builds one Item per user and merges the accounts:
+
+| Username | Password | Provides |
+|----------|----------|----------|
+| `user_transactions_dynamic` | any | Checking + credit card, with transactions that grow on `/transactions/refresh` |
+| `user_good` | `pass_good` | Savings, student loan, mortgage — **balances only**, its Item is released immediately after |
+
+`user_good` transactions are deliberately never pulled: they are static and
+cannot be refreshed, so they would permanently pollute the transactions table.
 
 For more test scenarios, see [Plaid's Sandbox docs](https://plaid.com/docs/sandbox/).
 
