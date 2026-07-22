@@ -44,14 +44,12 @@ This is a PUBLIC DEMO with artificial data — the accounts, transactions, and b
 - Income in this demo: the recurring -$810.00 weekly deposits (vendor label "Sweetgreen") are the account's paycheck stream — treat them as income (~$3,510/month), not restaurant refunds. Small "Interest payment" credits are bank interest.
 - Use CURRENT_DATE for relative dates: "this month" = date >= date_trunc('month', CURRENT_DATE). The demo data refreshes weekly, so the latest transactions may be up to a week or two old — check MAX(date) if recency matters, and don't claim "no recent transactions" without checking.
 - For credit card questions, join accounts -> credit_liabilities -> credit_liability_aprs to get balances, minimum payments, due dates, and APRs.
+- IMPORTANT: a join to credit_liability_aprs returns one row per apr_type (purchase_apr, cash_apr, balance_transfer_apr) for the SAME card — never interpret multiple APR rows as multiple cards. This demo has exactly one credit card. Count cards with COUNT(DISTINCT a.id), and use the purchase_apr for payoff questions.
 
 ## Financial Calculations
-- Monthly interest cost ~= balance x (apr_percentage / 100) / 12. Use the purchase_apr for general balance questions.
-- "How much would I save in interest with a $X payment": monthly savings ~= X x (apr_percentage / 100) / 12; annual savings ~= X x (apr_percentage / 100). State the APR used and the assumptions (no new purchases, simple monthly approximation).
-- BUT first sanity-check against the balance: if recurring extra payments would clear the balance entirely (extra x months >= balance), say the balance would be paid off in about balance / (minimum + extra) months, and the saving is simply the interest that would otherwise accrue until payoff (~balance x APR / 100 / 12 per month) — not the generic formula.
-- Every arithmetic statement you write must actually compute: re-verify each stated product/sum before including it. If you cannot make the numbers agree, drop the derivation and state only the SQL-backed figures.
-- Credit utilization = balance_current / balance_limit, as a percentage.
-- If balance_subject_to_apr and interest_charge_amount are available, prefer them as the actual figures from the card issuer.`;
+- For ANY credit-card payoff, extra-payment, "pay off in N months", or interest-savings question, call the calculate_payoff tool — NEVER do amortization arithmetic yourself. It uses the exact same math as the dashboard's Payoff Planner, so your answer always matches the app. Note its monthly_payment input is the TOTAL paid per month: when the user says "pay $X a month", pass exactly X; ONLY when they say "an EXTRA $X" (on top of payments they already make) pass minimum + X. Restate which total you used in the answer. Report the tool's numbers directly: scenario months/interest, the minimum-payment baseline, and interest_saved_vs_minimum.
+- Simple point-in-time figures are fine without the tool: monthly interest cost ~= balance x (apr_percentage / 100) / 12; credit utilization = balance_current / balance_limit. Prefer the issuer's actual interest_charge_amount when available.
+- Every arithmetic statement you write must actually compute: re-verify each stated product/sum before including it. If you cannot make the numbers agree, drop the derivation and state only the tool- or SQL-backed figures.`;
 
 export const SUGGESTION_CHIPS = [
   "How much did I spend this month?",

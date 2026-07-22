@@ -3,6 +3,7 @@ import { google } from '@ai-sdk/google';
 import { SYSTEM_PROMPT } from '@/lib/chat-config';
 import { createServerSupabase } from '@/lib/supabase/server';
 import { detectRecurring, estimateMonthlyTotal, isLikelySubscription } from '@/lib/recurring-detection';
+import { calculatePayoff } from '@/lib/payoff';
 import type { Transaction } from '@/lib/queries/types';
 import { z } from 'zod';
 
@@ -100,6 +101,71 @@ export async function POST(req: Request) {
           }
 
           return { rows: data, count: Array.isArray(data) ? data.length : 0 };
+        },
+      },
+      calculate_payoff: {
+        description:
+          "Calculate a credit-card payoff scenario with the exact amortization math the dashboard's Payoff Planner uses. ALWAYS use this for any payoff / extra-payment / interest-savings question — never estimate amortization yourself. Provide either monthly_payment (total paid per month) or target_months (desired payoff horizon). Balance, APR, and minimum payment come from the database automatically.",
+        inputSchema: z.object({
+          monthly_payment: z
+            .number()
+            .optional()
+            .describe('Total monthly payment for the scenario (e.g. minimum + extra)'),
+          target_months: z
+            .number()
+            .optional()
+            .describe('Desired months to full payoff; the required monthly payment is computed'),
+        }),
+        execute: async ({ monthly_payment, target_months }: { monthly_payment?: number; target_months?: number }) => {
+          const supabase = createServerSupabase();
+          const { data, error } = await supabase.rpc('execute_readonly_query', {
+            query_text:
+              "SELECT a.balance_current, cl.minimum_payment_amount, apr.apr_percentage FROM accounts a JOIN credit_liabilities cl ON cl.account_id = a.id JOIN credit_liability_aprs apr ON apr.credit_liability_id = cl.id WHERE a.type = 'credit' AND apr.apr_type = 'purchase_apr' LIMIT 1",
+          });
+          if (error || !Array.isArray(data) || data.length === 0) {
+            return { error: 'Could not load credit card details' };
+          }
+          const { balance_current, minimum_payment_amount, apr_percentage } = data[0] as {
+            balance_current: number;
+            minimum_payment_amount: number;
+            apr_percentage: number;
+          };
+          const balance = Number(balance_current);
+          const apr = Number(apr_percentage);
+          const minPayment = Number(minimum_payment_amount);
+
+          let payment = monthly_payment;
+          if (payment == null && target_months != null && target_months > 0) {
+            const r = apr / 100 / 12;
+            payment =
+              target_months <= 1 || r === 0
+                ? balance
+                : (balance * r) / (1 - Math.pow(1 + r, -target_months));
+            payment = Math.ceil(payment * 100) / 100;
+          }
+          if (payment == null) {
+            return { error: 'Provide monthly_payment or target_months' };
+          }
+
+          const round = (n: number) => Math.round(n * 100) / 100;
+          const fmt = (p: ReturnType<typeof calculatePayoff>) => ({
+            monthly_payment: round(p.monthlyPayment),
+            months: p.months,
+            total_interest: round(p.totalInterest),
+            total_paid: round(p.totalPaid),
+            ...(p.warning ? { warning: p.warning } : {}),
+          });
+
+          const scenario = calculatePayoff(balance, payment, apr);
+          const baseline = calculatePayoff(balance, minPayment, apr);
+          return {
+            balance,
+            purchase_apr: apr,
+            minimum_payment: minPayment,
+            scenario: fmt(scenario),
+            baseline_at_minimum_payment: fmt(baseline),
+            interest_saved_vs_minimum: round(baseline.totalInterest - scenario.totalInterest),
+          };
         },
       },
       get_recurring_charges: {
