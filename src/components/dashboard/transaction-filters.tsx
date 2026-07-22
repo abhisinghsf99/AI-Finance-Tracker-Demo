@@ -126,6 +126,7 @@ export function TransactionFilterPopover({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="">All categories</SelectItem>
                 {categories.map((cat) => (
                   <SelectItem key={cat} value={cat}>
                     {formatCategoryName(cat)}
@@ -194,6 +195,7 @@ export function TransactionFilterPopover({
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="">All accounts</SelectItem>
                 {accounts.map((acc) => (
                   <SelectItem key={acc.id} value={acc.id}>
                     {acc.name}
