@@ -34,6 +34,7 @@ const WEEKLY_INCOME = { name: 'Sweetgreen', amount: -810, saturday: 6 }
 interface CatalogEntry {
   name: string
   merchant_name: string | null
+  merchant_entity_id: string | null
   category_primary: string | null
   category_detailed: string | null
   payment_channel: string | null
@@ -79,7 +80,7 @@ export async function syntheticTopUp(): Promise<TopUpResult> {
 
   const { data: history } = await supabase
     .from('transactions')
-    .select('name, merchant_name, category_primary, category_detailed, payment_channel, account_id, logo_url, website, amount')
+    .select('name, merchant_name, merchant_entity_id, category_primary, category_detailed, payment_channel, account_id, logo_url, website, amount')
     .gt('amount', 0)
     .gte('date', fmt(windowStart))
   const spendHistory = (history ?? []).filter(
@@ -108,6 +109,11 @@ export async function syntheticTopUp(): Promise<TopUpResult> {
 
   const amountFor = (e: CatalogEntry): number => {
     const base = e.amounts[Math.floor(Math.random() * e.amounts.length)]
+    // A merchant whose charges are all identical is fixed-price (subscription,
+    // membership) — jittering it would split its recurring-detection group.
+    if (e.amounts.every((a) => a === e.amounts[0])) {
+      return Math.round(base * 100) / 100
+    }
     const jittered = base * (0.85 + Math.random() * 0.3)
     return Math.max(0.99, Math.round(jittered * 100) / 100)
   }
@@ -162,7 +168,7 @@ function buildRow(
     datetime: null,
     name: template.name,
     merchant_name: template.merchant_name,
-    merchant_entity_id: null,
+    merchant_entity_id: template.merchant_entity_id,
     category_primary: template.category_primary,
     category_detailed: template.category_detailed,
     payment_channel: template.payment_channel,

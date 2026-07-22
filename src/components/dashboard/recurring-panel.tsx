@@ -54,7 +54,7 @@ export function RecurringPanel({ transactions }: RecurringPanelProps) {
       <Card>
         <div className="px-4 pt-4">
           {previewCharges.map((charge) => (
-            <RecurringRow key={charge.merchantName} charge={charge} />
+            <RecurringRow key={`${charge.merchantName}-${charge.amount}`} charge={charge} />
           ))}
         </div>
 
@@ -97,7 +97,7 @@ export function RecurringPanel({ transactions }: RecurringPanelProps) {
 
           <div className="flex-1 overflow-y-auto min-h-0 px-1">
             {recurring.map((charge) => (
-              <RecurringRow key={charge.merchantName} charge={charge} />
+              <RecurringRow key={`${charge.merchantName}-${charge.amount}`} charge={charge} />
             ))}
           </div>
 
