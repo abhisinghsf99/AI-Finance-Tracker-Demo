@@ -33,8 +33,12 @@ const MONTHLY_SUBSCRIPTIONS = [
   { merchant: 'AccuWeather', amount: 4.99, dayOfMonth: 8 },
 ]
 
-/** The demo's recurring weekly income deposit (Saturdays, mirrors seed data). */
-const WEEKLY_INCOME = { name: 'Sweetgreen', amount: -810, saturday: 6 }
+/** The demo's recurring weekly payroll deposit (Saturdays). */
+const WEEKLY_INCOME = {
+  name: 'DIRECT DEPOSIT - APEX TECHNOLOGIES PAYROLL',
+  amount: -4750,
+  saturday: 6,
+}
 
 interface CatalogEntry {
   name: string
@@ -124,7 +128,17 @@ export async function syntheticTopUp(): Promise<TopUpResult> {
   }
 
   const subscriptionNames = new Set(MONTHLY_SUBSCRIPTIONS.map((s) => s.merchant))
-  const incomeTemplate = (history ?? []).find((t) => Number(t.amount) === WEEKLY_INCOME.amount)
+
+  // Income rows are negative, so the spending-history query above can never
+  // contain them — fetch the latest paycheck separately as the template.
+  const { data: incomeRows } = await supabase
+    .from('transactions')
+    .select('name, merchant_name, merchant_entity_id, category_primary, category_detailed, payment_channel, account_id, logo_url, website, amount')
+    .eq('name', WEEKLY_INCOME.name)
+    .lt('amount', 0)
+    .order('date', { ascending: false })
+    .limit(1)
+  const incomeTemplate = incomeRows?.[0]
 
   const rows = []
   for (let d = new Date(start); fmt(d) <= fmt(today); d.setUTCDate(d.getUTCDate() + 1)) {

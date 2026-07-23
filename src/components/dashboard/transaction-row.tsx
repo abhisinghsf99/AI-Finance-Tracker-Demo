@@ -1,7 +1,7 @@
 "use client"
 
 import type { TransactionWithAccount } from "@/lib/queries/transactions"
-import { formatCurrency } from "@/lib/plaid-amounts"
+import { formatSignedCurrency, isIncome } from "@/lib/plaid-amounts"
 import { getCategoryColor } from "@/lib/chart-colors"
 
 interface TransactionRowProps {
@@ -27,7 +27,8 @@ function formatCategoryName(category: string): string {
 export function TransactionRow({ transaction }: TransactionRowProps) {
   const merchantName =
     transaction.merchant_name ?? transaction.name ?? "Unknown"
-  const amount = formatCurrency(transaction.amount)
+  const amount = formatSignedCurrency(transaction.amount)
+  const incoming = isIncome(transaction.amount)
   const category = transaction.category_primary ?? "OTHER"
   const categoryColor = getCategoryColor(category)
   const date = formatDate(transaction.date)
@@ -39,7 +40,9 @@ export function TransactionRow({ transaction }: TransactionRowProps) {
         <span className="font-medium text-foreground truncate mr-2">
           {merchantName}
         </span>
-        <span className="font-medium text-foreground whitespace-nowrap">
+        <span
+          className={`font-medium whitespace-nowrap ${incoming ? "text-emerald-400" : "text-foreground"}`}
+        >
           {amount}
         </span>
       </div>

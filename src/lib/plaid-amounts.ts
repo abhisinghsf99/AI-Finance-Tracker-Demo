@@ -23,6 +23,12 @@ export function formatCurrency(amount: number): string {
   }).format(Math.abs(amount))
 }
 
+/** Format with an explicit sign for money coming in: "+$4,750.00" */
+export function formatSignedCurrency(amount: number): string {
+  const base = formatCurrency(amount)
+  return isIncome(amount) ? `+${base}` : base
+}
+
 /** Sum only spending transactions (positive amounts) */
 export function totalSpending(amounts: number[]): number {
   return amounts.filter((a) => a > 0).reduce((sum, a) => sum + a, 0)
