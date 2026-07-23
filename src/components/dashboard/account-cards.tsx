@@ -148,6 +148,53 @@ function CreditLiabilityInfo({ accountId }: { accountId: string }) {
   )
 }
 
+function DepositoryActivityInfo({ accountId }: { accountId: string }) {
+  const { transactions } = useDashboardStore()
+
+  const accountTxns = transactions.filter((t) => t.account_id === accountId)
+  if (accountTxns.length === 0) return null
+
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 30)
+  const cutoffStr = cutoff.toISOString().slice(0, 10)
+
+  const recent = accountTxns.filter((t) => t.date >= cutoffStr)
+  const moneyIn = recent
+    .filter((t) => t.amount < 0)
+    .reduce((sum, t) => sum + Math.abs(t.amount), 0)
+  const moneyOut = recent
+    .filter((t) => t.amount > 0)
+    .reduce((sum, t) => sum + t.amount, 0)
+
+  const lastDeposit = accountTxns
+    .filter((t) => t.amount < 0)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
+
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs border-t border-border/40 pt-3">
+      <div>
+        <p className="text-muted-foreground">In (30 days)</p>
+        <p className="font-medium text-emerald-400">+{formatCurrency(moneyIn)}</p>
+      </div>
+      <div>
+        <p className="text-muted-foreground">Out (30 days)</p>
+        <p className="font-medium">{formatCurrency(moneyOut)}</p>
+      </div>
+      {lastDeposit && (
+        <div className="col-span-2">
+          <p className="text-muted-foreground">Last Deposit</p>
+          <p className="font-medium">
+            +{formatCurrency(lastDeposit.amount)}
+            <span className="text-muted-foreground ml-1">
+              on {formatDate(lastDeposit.date)}
+            </span>
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AccountCard({ account }: { account: Account }) {
   const config = TYPE_CONFIG[account.type] ?? TYPE_CONFIG.depository
   const Icon = config.icon
@@ -196,6 +243,7 @@ function AccountCard({ account }: { account: Account }) {
             <span className="text-xs text-muted-foreground">{mask}</span>
           )}
         </div>
+        {isDepository && <DepositoryActivityInfo accountId={account.id} />}
         {isCredit && <CreditUtilizationBar account={account} />}
         {(isCredit || account.type === "loan") && (
           <CreditLiabilityInfo accountId={account.id} />

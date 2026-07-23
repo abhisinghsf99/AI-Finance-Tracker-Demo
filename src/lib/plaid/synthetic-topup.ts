@@ -33,11 +33,28 @@ const MONTHLY_SUBSCRIPTIONS = [
   { merchant: 'AccuWeather', amount: 4.99, dayOfMonth: 8 },
 ]
 
-/** The demo's recurring weekly payroll deposit (Saturdays). */
-const WEEKLY_INCOME = {
+/**
+ * The demo's recurring bi-weekly payroll deposit: every other Saturday,
+ * anchored so paydays land 14 days apart from the 2026-07-18 paycheck.
+ */
+const BIWEEKLY_INCOME = {
   name: 'DIRECT DEPOSIT - APEX TECHNOLOGIES PAYROLL',
   amount: -4750,
-  saturday: 6,
+  anchor: Date.UTC(2026, 6, 18),
+}
+
+/** Monthly interest credit on the savings account (last day of the month). */
+const SAVINGS_INTEREST = { name: 'INTEREST PAYMENT', amount: -108.12 }
+
+function isPayday(d: Date): boolean {
+  const diffDays = Math.round((d.getTime() - BIWEEKLY_INCOME.anchor) / 86_400_000)
+  return diffDays % 14 === 0
+}
+
+function isLastDayOfMonth(d: Date): boolean {
+  const next = new Date(d)
+  next.setUTCDate(next.getUTCDate() + 1)
+  return next.getUTCDate() === 1
 }
 
 interface CatalogEntry {
@@ -130,15 +147,19 @@ export async function syntheticTopUp(): Promise<TopUpResult> {
   const subscriptionNames = new Set(MONTHLY_SUBSCRIPTIONS.map((s) => s.merchant))
 
   // Income rows are negative, so the spending-history query above can never
-  // contain them — fetch the latest paycheck separately as the template.
-  const { data: incomeRows } = await supabase
-    .from('transactions')
-    .select('name, merchant_name, merchant_entity_id, category_primary, category_detailed, payment_channel, account_id, logo_url, website, amount')
-    .eq('name', WEEKLY_INCOME.name)
-    .lt('amount', 0)
-    .order('date', { ascending: false })
-    .limit(1)
-  const incomeTemplate = incomeRows?.[0]
+  // contain them — fetch the latest of each deposit type as templates.
+  const depositTemplate = async (name: string) => {
+    const { data } = await supabase
+      .from('transactions')
+      .select('name, merchant_name, merchant_entity_id, category_primary, category_detailed, payment_channel, account_id, logo_url, website, amount')
+      .eq('name', name)
+      .lt('amount', 0)
+      .order('date', { ascending: false })
+      .limit(1)
+    return data?.[0]
+  }
+  const incomeTemplate = await depositTemplate(BIWEEKLY_INCOME.name)
+  const interestTemplate = await depositTemplate(SAVINGS_INTEREST.name)
 
   const rows = []
   for (let d = new Date(start); fmt(d) <= fmt(today); d.setUTCDate(d.getUTCDate() + 1)) {
@@ -152,8 +173,12 @@ export async function syntheticTopUp(): Promise<TopUpResult> {
       rows.push(buildRow(dateStr, template, sub.amount))
     }
 
-    if (d.getUTCDay() === WEEKLY_INCOME.saturday && incomeTemplate) {
-      rows.push(buildRow(dateStr, { ...incomeTemplate, amounts: [] }, WEEKLY_INCOME.amount))
+    if (isPayday(d) && incomeTemplate) {
+      rows.push(buildRow(dateStr, { ...incomeTemplate, amounts: [] }, BIWEEKLY_INCOME.amount))
+    }
+
+    if (isLastDayOfMonth(d) && interestTemplate) {
+      rows.push(buildRow(dateStr, { ...interestTemplate, amounts: [] }, SAVINGS_INTEREST.amount))
     }
 
     const count = Math.round(SPEND_PER_DAY * (0.5 + Math.random()))
