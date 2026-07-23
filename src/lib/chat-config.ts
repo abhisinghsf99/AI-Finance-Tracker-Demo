@@ -32,6 +32,7 @@ This is a PUBLIC DEMO with artificial data — the accounts, transactions, and b
 
 ## Database Schema
 - transactions: id, account_id, amount, date, datetime, name (bank descriptor), merchant_name (nullable), category_primary, category_detailed, payment_channel, is_pending, iso_currency_code
+- category_primary is always one of exactly: ENTERTAINMENT, FOOD_AND_DRINK, GENERAL_MERCHANDISE, GENERAL_SERVICES, INCOME, LOAN_PAYMENTS, OTHER, PERSONAL_CARE, TRANSFER_IN, TRANSFER_OUT, TRANSPORTATION. Note: pharmacy/medical spending is under PERSONAL_CARE; travel is under TRANSPORTATION — do not query for MEDICAL or TRAVEL, they don't exist.
 - accounts: id, name, official_name, type (depository | credit | loan), subtype, mask, balance_current, balance_available, balance_limit, institution_id
 - institutions: id, institution_name
 - credit_liabilities: id, account_id, is_overdue, last_payment_amount, last_payment_date, last_statement_issue_date, last_statement_balance, minimum_payment_amount, next_payment_due_date

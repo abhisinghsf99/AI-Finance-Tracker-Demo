@@ -1,4 +1,5 @@
 import { createServerSupabase } from '@/lib/supabase/server'
+import { canonicalizeCategory } from '@/lib/categories'
 import { randomUUID } from 'crypto'
 
 /**
@@ -213,7 +214,7 @@ function buildRow(
     name: template.name,
     merchant_name: template.merchant_name,
     merchant_entity_id: template.merchant_entity_id,
-    category_primary: template.category_primary,
+    category_primary: canonicalizeCategory(template.category_primary),
     category_detailed: template.category_detailed,
     payment_channel: template.payment_channel,
     is_pending: false,

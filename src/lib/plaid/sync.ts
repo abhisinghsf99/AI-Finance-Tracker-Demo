@@ -1,6 +1,7 @@
 import { plaidClient } from './client'
 import { createServerSupabase } from '@/lib/supabase/server'
 import type { RemovedTransaction, Transaction as PlaidTransaction } from 'plaid'
+import { canonicalizeCategory } from '@/lib/categories'
 
 /**
  * Sync transactions for a given institution (plaid item).
@@ -58,7 +59,7 @@ export async function syncTransactions(institutionId: string) {
     name: txn.name,
     merchant_name: txn.merchant_name || null,
     merchant_entity_id: txn.merchant_entity_id || null,
-    category_primary: txn.personal_finance_category?.primary || null,
+    category_primary: canonicalizeCategory(txn.personal_finance_category?.primary),
     category_detailed: txn.personal_finance_category?.detailed || null,
     payment_channel: txn.payment_channel || null,
     is_pending: txn.pending,
