@@ -103,6 +103,16 @@ export async function POST(req: Request) {
           return { rows: data, count: Array.isArray(data) ? data.length : 0 };
         },
       },
+      sum_amounts: {
+        description:
+          'Add a list of dollar amounts exactly. Use this EVERY time you state a total of two or more prices (e.g. the combined saving from dropping several subscriptions) — never add amounts in your head.',
+        inputSchema: z.object({
+          amounts: z.array(z.number()).min(2).describe('The dollar amounts to add'),
+        }),
+        execute: async ({ amounts }: { amounts: number[] }) => ({
+          total: Math.round(amounts.reduce((s, n) => s + n, 0) * 100) / 100,
+        }),
+      },
       calculate_payoff: {
         description:
           "Calculate a credit-card payoff scenario with the exact amortization math the dashboard's Payoff Planner uses. ALWAYS use this for any payoff / extra-payment / interest-savings question — never estimate amortization yourself. Provide either monthly_payment (total paid per month) or target_months (desired payoff horizon). Balance, APR, and minimum payment come from the database automatically.",
