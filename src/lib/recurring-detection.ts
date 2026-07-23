@@ -66,7 +66,8 @@ const SUBSCRIPTION_KEYWORDS = new Set([
   "github", "notion", "figma", "vercel", "dropbox", "google storage",
   "adobe", "microsoft 365", "zoom", "slack", "linear", "1password",
   "nordvpn", "expressvpn", "planet fitness", "24 hour fitness", "godaddy",
-  "comcast", "att", "verizon", "t-mobile", "xfinity",
+  "xbox", "game pass", "accuweather", "comcast", "att", "verizon",
+  "t-mobile", "xfinity",
 ])
 
 export function isLikelySubscription(t: Transaction): boolean {
